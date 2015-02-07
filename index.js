@@ -20,7 +20,7 @@
 
   optimist.describe(['y', 'co'], "Use co so you can yield async values, etc.");
 
-  if ((optimist.argv.co != null) || (optimist.argv.y != null)) {
+  if (optimist.argv.co || optimist.argv.y) {
     exports.setup = function(context) {
       var nesh, _promiseObjectSequenceId;
       nesh = context.nesh;
@@ -43,56 +43,73 @@
       }
     };
     exports.postStart = function(context) {
-      var originalEval, repl;
+      var originalCoffeeEval, originalEval, repl;
       repl = context.repl;
-      originalEval = repl["eval"];
-      return repl["eval"] = function(input, context, filename, callback) {
-        var ast, body, last, result, useCo, wrapped;
-        useCo = false;
-        if (input.indexOf('yield') !== -1) {
-          try {
-            esprima.parse(input);
-            useCo = false;
-          } catch (_error) {
+      if (optimist.argv.coffee || optimist.argv.c) {
+        originalCoffeeEval = repl["eval"];
+        return repl["eval"] = function(input, context, filename, callback) {
+          if (input.indexOf('yield') !== -1) {
+            return originalCoffeeEval("-> " + input, context, filename, function(err, result) {
+              return co(result).then(function(result) {
+                return callback(void 0, result);
+              }, function(err) {
+                return callback(err);
+              });
+            });
+          } else {
+            return originalCoffeeEval(input, context, filename, callback);
+          }
+        };
+      } else {
+        originalEval = repl["eval"];
+        return repl["eval"] = function(input, context, filename, callback) {
+          var ast, body, last, result, useCo, wrapped;
+          useCo = false;
+          if (input.indexOf('yield') !== -1) {
             try {
-              wrapped = "(function* () { " + (input.trim()) + "; })";
-              ast = esprima.parse(wrapped);
-              body = ast.body[0].expression.body.body;
-              last = body[body.length - 1];
-              if (last.type === 'ExpressionStatement') {
-                body[body.length - 1] = {
-                  type: 'ReturnStatement',
-                  argument: last.expression
-                };
-                wrapped = escodegen.generate(ast);
-              }
-              useCo = true;
-            } catch (_error) {
+              esprima.parse(input);
               useCo = false;
+            } catch (_error) {
+              try {
+                wrapped = "(function* () { " + (input.trim()) + "; })";
+                ast = esprima.parse(wrapped);
+                body = ast.body[0].expression.body.body;
+                last = body[body.length - 1];
+                if (last.type === 'ExpressionStatement') {
+                  body[body.length - 1] = {
+                    type: 'ReturnStatement',
+                    argument: last.expression
+                  };
+                  wrapped = escodegen.generate(ast);
+                }
+                useCo = true;
+              } catch (_error) {
+                useCo = false;
+              }
             }
           }
-        }
-        if (useCo) {
-          if (repl.useGlobal) {
-            result = vm.runInThisContext(wrapped);
-          } else {
-            result = vm.runInContext(wrapped, context);
-          }
-          return co.wrap(result)().then(function(result) {
-            var tmpName;
-            tmpName = "$___nesh_co_result" + (Math.random().toString().substring(2)) + "___$";
-            context[tmpName] = result;
-            return originalEval(tmpName, context, filename, function(err, result) {
-              delete context[tmpName];
-              return callback(err, result);
+          if (useCo) {
+            if (repl.useGlobal) {
+              result = vm.runInThisContext(wrapped);
+            } else {
+              result = vm.runInContext(wrapped, context);
+            }
+            return co(result).then(function(result) {
+              var tmpName;
+              tmpName = "$___nesh_co_result" + (Math.random().toString().substring(2)) + "___$";
+              context[tmpName] = result;
+              return originalEval(tmpName, context, filename, function(err, result) {
+                delete context[tmpName];
+                return callback(err, result);
+              });
+            }, function(err) {
+              return callback(err);
             });
-          }, function(err) {
-            return callback(err);
-          });
-        } else {
-          return originalEval(input, context, filename, callback);
-        }
-      };
+          } else {
+            return originalEval(input, context, filename, callback);
+          }
+        };
+      }
     };
   }
 

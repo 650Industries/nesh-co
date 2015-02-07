@@ -1,0 +1,37 @@
+{
+  "name": "nesh-co",
+  "version": "1.1.0",
+  "description": "A plugin for nesh that lets you yield async values in the REPL",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ccheever/nesh-co.git"
+  },
+  "keywords": [
+    "nesh",
+    "co",
+    "repl",
+    "async",
+    "promises"
+  ],
+  "author": "Charlie Cheever <ccheever@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ccheever/nesh-co/issues"
+  },
+  "homepage": "https://github.com/ccheever/nesh-co",
+  "dependencies": {
+    "co": "git://github.com/ide/co#expose-generator-function",
+    "escodegen": "^1.6.1",
+    "esprima-fb": "^10001.1.0-dev-harmony-fb",
+    "instapromise": "0.0.10",
+    "optimist": "^0.6.1"
+  },
+  "devDependencies": {
+    "coffee-script": "^1.9.0",
+    "intdoc": "^1.1.0"
+  }
+}

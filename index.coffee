@@ -38,7 +38,7 @@ instapromise = require 'instapromise'
 # See https://github.com/danielgtaylor/nesh/issues/9
 optimist.describe ['y', 'co'], "Use co so you can yield async values, etc."
 
-if optimist.argv.co? or optimist.argv.y?
+if optimist.argv.co or optimist.argv.y
 
   exports.setup = (context) ->
     { nesh } = context
@@ -66,69 +66,88 @@ if optimist.argv.co? or optimist.argv.y?
   exports.postStart = (context) ->
     { repl } = context
 
-    originalEval = repl.eval
+    # Wish there was a more robust to tell if a given language has been loaded
+    # in nesh; consider making/submitting patch to nesh core to make it easier
+    # to tell if CoffeeScript (or any other language) has been loadded
+    #
+    # But for now, we'll just look at the command line args
+    if optimist.argv.coffee or optimist.argv.c
+      originalCoffeeEval = repl.eval
+      
+      repl.eval = (input, context, filename, callback) ->
+        #console.log "This code is being executed.\n"
+        if input.indexOf('yield') != -1
+          originalCoffeeEval "-> #{ input }", context, filename, (err, result) ->
+            co(result).then (result) ->
+              callback undefined, result
+            , (err) ->
+              callback err
+        else originalCoffeeEval input, context, filename, callback
 
-    repl.eval = (input, context, filename, callback) ->
+    else
+      originalEval = repl.eval
 
-      #context.___nesh_co_co_wrap___ = co.wrap
+      repl.eval = (input, context, filename, callback) ->
 
-      useCo = false
+        #context.___nesh_co_co_wrap___ = co.wrap
 
-      # We only need to bother thinking about using co if the string
-      # 'yield' appears in the input
-      if input.indexOf('yield') != -1
+        useCo = false
 
-        try
-          # First, try to parse the input as-is; if it parses, then
-          # we can just eval as usual
-          esprima.parse input
-          useCo = false
-
-        catch
-          # ... but that doesn't work, try wrapping the code in a function*
-          # and seeing if that will parse
+        # We only need to bother thinking about using co if the string
+        # 'yield' appears in the input
+        if input.indexOf('yield') != -1
 
           try
-            wrapped = "(function* () { #{ input.trim() }; })"
-            ast = esprima.parse wrapped
-            body = ast.body[0].expression.body.body
-            last = body[body.length - 1]
-
-            # If we end with an ExpressionStatement and not
-            # a ReturnStatement, we'll convert it
-            if last.type is 'ExpressionStatement'
-              body[body.length - 1] =
-                type: 'ReturnStatement'
-                argument: last.expression
-
-              wrapped = escodegen.generate ast
-
-            #context.___nesh_co_wrapped___ = wrapped
-            useCo = true
-          catch
-            # If that didn't work, there's some problem with it, and we
-            # should just parse it straight up I think
+            # First, try to parse the input as-is; if it parses, then
+            # we can just eval as usual
+            esprima.parse input
             useCo = false
 
-      if useCo
-        if repl.useGlobal
-          result = vm.runInThisContext wrapped
+          catch
+            # ... but that doesn't work, try wrapping the code in a function*
+            # and seeing if that will parse
+
+            try
+              wrapped = "(function* () { #{ input.trim() }; })"
+              ast = esprima.parse wrapped
+              body = ast.body[0].expression.body.body
+              last = body[body.length - 1]
+
+              # If we end with an ExpressionStatement and not
+              # a ReturnStatement, we'll convert it
+              if last.type is 'ExpressionStatement'
+                body[body.length - 1] =
+                  type: 'ReturnStatement'
+                  argument: last.expression
+
+                wrapped = escodegen.generate ast
+
+              #context.___nesh_co_wrapped___ = wrapped
+              useCo = true
+            catch
+              # If that didn't work, there's some problem with it, and we
+              # should just parse it straight up I think
+              useCo = false
+
+        if useCo
+          if repl.useGlobal
+            result = vm.runInThisContext wrapped
+          else
+            result = vm.runInContext wrapped, context
+
+          co(result).then (result) ->
+
+            # There may be something important about calling the original
+            # eval, so we do that here
+            tmpName = "$___nesh_co_result#{ Math.random().toString().substring(2) }___$"
+            context[tmpName] = result
+            originalEval tmpName, context, filename, (err, result) ->
+              # Delete the temporarily stored value so it can be garbage collected
+              delete context[tmpName]
+              callback err, result
+
+          , (err) ->
+            callback err
+
         else
-          result = vm.runInContext wrapped, context
-
-        co.wrap(result)().then (result) ->
-
-          # There may be something important about calling the original
-          # eval, so we do that here
-          tmpName = "$___nesh_co_result#{ Math.random().toString().substring(2) }___$"
-          context[tmpName] = result
-          originalEval tmpName, context, filename, (err, result) ->
-            # Delete the temporarily stored value so it can be garbage collected
-            delete context[tmpName]
-            callback err, result
-
-        , (err) ->
-          callback err
-
-      else
-        originalEval input, context, filename, callback
+          originalEval input, context, filename, callback

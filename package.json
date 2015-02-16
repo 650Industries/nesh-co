@@ -1,6 +1,6 @@
 {
   "name": "nesh-co",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "A plugin for nesh that lets you yield async values in the REPL",
   "main": "index.js",
   "scripts": {
@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/ccheever/nesh-co",
   "dependencies": {
-    "co": "git://github.com/ide/co#expose-generator-function",
+    "co": "^4.4.0",
     "escodegen": "^1.6.1",
     "esprima-fb": "^10001.1.0-dev-harmony-fb",
     "instapromise": "1.0.0",
